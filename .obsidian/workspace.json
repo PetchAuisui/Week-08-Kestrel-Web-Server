@@ -1,0 +1,198 @@
+{
+  "main": {
+    "id": "cef35a69bba882fd",
+    "type": "split",
+    "children": [
+      {
+        "id": "e896faac2b2ccc8a",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "a4af9f01a03ece14",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "06-Labsheet-08-1-Kestrel-Minimal-API-Fundamentals.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "06-Labsheet-08-1-Kestrel-Minimal-API-Fundamentals"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "7d23846cf487d226",
+    "type": "split",
+    "children": [
+      {
+        "id": "8ba77c2a3f21cdb2",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "c4cb9d0d6a5ceaf5",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "11110f67fbdda8be",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "c5848421f2a484bd",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "bf760e65360a2402",
+    "type": "split",
+    "children": [
+      {
+        "id": "674f59996e2117b6",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "c689cd1c2f82cb8f",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "06-Labsheet-08-1-Kestrel-Minimal-API-Fundamentals.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks"
+            }
+          },
+          {
+            "id": "4eaca7c4fe57aff9",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "06-Labsheet-08-1-Kestrel-Minimal-API-Fundamentals.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links"
+            }
+          },
+          {
+            "id": "774f85dc4fac5a31",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "e792bd5d924da840",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "6db586229877e608",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "06-Labsheet-08-1-Kestrel-Minimal-API-Fundamentals.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "a4af9f01a03ece14",
+  "lastOpenFiles": [
+    "Images/Pasted image 20260907092420.png",
+    "Untitled",
+    "06-Labsheet-08-1-Kestrel-Minimal-API-Fundamentals.md",
+    "01-Edge-WebServer-and-Kestrel-Architecture.md"
+  ]
+}

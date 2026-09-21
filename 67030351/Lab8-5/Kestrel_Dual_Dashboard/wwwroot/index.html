@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Dual-Channel IoT Command Center powered by Kestrel and ESP32">
+    <title>Dual-Channel IoT Command Center | 67030351</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #070d18;
+            --panel: rgba(11, 22, 38, 0.85);
+            --panel-strong: #0f2037;
+            --line: rgba(56, 189, 248, 0.2);
+            --line-subtle: rgba(148, 163, 184, 0.12);
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --cyan: #00f2fe;
+            --cyan-glow: rgba(0, 242, 254, 0.4);
+            --blue: #2898ff;
+            --green: #10b981;
+            --yellow: #f59e0b;
+            --red: #ef4444;
+            --needle-red: #ff3366;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            min-height: 100vh;
+            background:
+                radial-gradient(circle at 50% 10%, #132540 0%, var(--bg) 85%);
+            color: var(--text);
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: clamp(1rem, 3vw, 2.5rem);
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        /* พื้นหลังเส้นตารางล้ำสมัย */
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            opacity: 0.12;
+            background-image:
+                linear-gradient(rgba(56, 189, 248, 0.2) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(56, 189, 248, 0.2) 1px, transparent 1px);
+            background-size: 36px 36px;
+            mask-image: radial-gradient(ellipse at center, black 40%, transparent 85%);
+        }
+
+        .container {
+            width: min(1100px, 100%);
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            z-index: 1;
+        }
+
+        /* Header Bar */
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 1rem;
+            padding: 1.25rem 1.5rem;
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            backdrop-filter: blur(16px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+        }
+
+        .header-title h1 {
+            font-size: clamp(1.3rem, 3vw, 1.85rem);
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            background: linear-gradient(90deg, #ffffff 30%, var(--cyan) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-title p {
+            color: var(--muted);
+            font-size: 0.85rem;
+            margin-top: 0.25rem;
+        }
+
+        .badge-id {
+            display: inline-block;
+            background: rgba(0, 242, 254, 0.12);
+            color: var(--cyan);
+            border: 1px solid rgba(0, 242, 254, 0.3);
+            border-radius: 6px;
+            padding: 0.15rem 0.5rem;
+            font-size: 0.78rem;
+            font-family: ui-monospace, monospace;
+            font-weight: 600;
+            margin-left: 0.4rem;
+        }
+
+        .status-pill {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            background: rgba(15, 32, 55, 0.7);
+            border: 1px solid var(--line-subtle);
+            padding: 0.45rem 0.9rem;
+            border-radius: 999px;
+            font-size: 0.82rem;
+            color: var(--muted);
+        }
+
+        .status-dot {
+            width: 0.65rem;
+            height: 0.65rem;
+            border-radius: 50%;
+            background: var(--yellow);
+            box-shadow: 0 0 10px currentColor;
+            transition: background 0.3s, box-shadow 0.3s;
+        }
+
+        .status-pill.live .status-dot { background: var(--green); color: var(--green); }
+        .status-pill.simulation .status-dot { background: var(--yellow); color: var(--yellow); }
+        .status-pill.offline .status-dot { background: var(--red); color: var(--red); }
+
+        /* Dashboard Grid 2 Columns */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 1.5rem;
+            width: 100%;
+        }
+
+        /* Widget Cards */
+        .widget-card {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 20px;
+            padding: 1.5rem;
+            backdrop-filter: blur(16px);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .widget-card:hover {
+            border-color: rgba(0, 242, 254, 0.45);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 20px rgba(0, 242, 254, 0.1);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--line-subtle);
+            margin-bottom: 1.25rem;
+        }
+
+        .card-tag {
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            padding: 0.25rem 0.6rem;
+            border-radius: 6px;
+        }
+
+        .tag-chA {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--green);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .tag-chB {
+            background: rgba(0, 242, 254, 0.15);
+            color: var(--cyan);
+            border: 1px solid rgba(0, 242, 254, 0.3);
+        }
+
+        .card-header h2 {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .widget-body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 0.5rem 0;
+            flex: 1;
+        }
+
+        /* SVG Sizing */
+        .gauge-svg {
+            display: block;
+            width: 100%;
+            max-width: 280px;
+            height: auto;
+            overflow: visible;
+        }
+
+        /* Tank Transitions */
+        #water-fill {
+            transition: y 0.12s ease-out, height 0.12s ease-out;
+        }
+
+        /* Speedometer Needle Transition */
+        #speedo-needle {
+            transform-origin: 150px 145px;
+            transform: rotate(-90deg);
+            transition: transform 0.12s cubic-bezier(0.18, 0.8, 0.25, 1);
+        }
+
+        /* Metrics Telemetry Info */
+        .metrics-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+            width: 100%;
+            margin-top: 1.25rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--line-subtle);
+        }
+
+        .metric-box {
+            background: rgba(15, 32, 55, 0.6);
+            border: 1px solid var(--line-subtle);
+            border-radius: 12px;
+            padding: 0.65rem 0.85rem;
+            text-align: center;
+        }
+
+        .metric-label {
+            font-size: 0.72rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .metric-value {
+            font-size: 1.15rem;
+            font-weight: 700;
+            font-family: ui-monospace, SFMono-Regular, monospace;
+            margin-top: 0.2rem;
+            color: var(--text);
+        }
+
+        .big-percent {
+            font-size: clamp(2rem, 5vw, 2.5rem);
+            font-weight: 800;
+            font-family: ui-monospace, SFMono-Regular, monospace;
+            margin-top: 0.5rem;
+            text-align: center;
+        }
+
+        .percent-left {
+            color: var(--cyan);
+            text-shadow: 0 0 20px var(--cyan-glow);
+        }
+
+        .percent-right {
+            color: #38bdf8;
+            text-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+        }
+
+        /* Footer Info */
+        footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            padding: 1rem 1.5rem;
+            background: var(--panel);
+            border: 1px solid var(--line-subtle);
+            border-radius: 14px;
+            font-size: 0.8rem;
+            color: var(--muted);
+            font-family: ui-monospace, monospace;
+        }
+
+        .footer-source {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .source-tag {
+            color: var(--text);
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <div class="header-title">
+                <h1>🎛️ Dual-Channel IoT Command Center</h1>
+                <p>ESP32 Multi-Channel Telemetry Stream &bull; Kestrel Edge Gateway <span class="badge-id">ID: 67030351</span></p>
+            </div>
+            <div class="status-pill" id="status-pill">
+                <span class="status-dot"></span>
+                <span id="status-text">Connecting...</span>
+            </div>
+        </header>
+
+        <!-- Dashboard 2-Column Grid -->
+        <main class="dashboard-grid">
+            <!-- Left Card: Channel A (Liquid Level Tank) -->
+            <section class="widget-card" aria-label="ช่องสัญญาณ A">
+                <div class="card-header">
+                    <div>
+                        <h2>Liquid Level Tank</h2>
+                        <p style="font-size: 0.78rem; color: var(--muted);">Left Gauge (Student ID: N mod 4 + 1 = 4)</p>
+                    </div>
+                    <span class="card-tag tag-chA">CH-A &bull; Hardware</span>
+                </div>
+
+                <div class="widget-body">
+                    <!-- SVG Liquid Level Tank (0 - 100%) -->
+                    <svg class="gauge-svg" viewBox="0 0 220 220" role="meter" aria-label="ระดับของเหลวในถัง" aria-valuemin="0" aria-valuemax="100" id="tank-svg">
+                        <defs>
+                            <linearGradient id="tank-water-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" stop-color="#00f2fe" stop-opacity="0.95"/>
+                                <stop offset="100%" stop-color="#2898ff" stop-opacity="0.8"/>
+                            </linearGradient>
+                            <clipPath id="tank-clip">
+                                <rect x="55" y="20" width="90" height="150" rx="20"/>
+                            </clipPath>
+                            <filter id="tank-glow" x="-20%" y="-20%" width="140%" height="140%">
+                                <feGaussianBlur stdDeviation="4" result="blur"/>
+                                <feMerge>
+                                    <feMergeNode in="blur"/>
+                                    <feMergeNode in="SourceGraphic"/>
+                                </feMerge>
+                            </filter>
+                        </defs>
+
+                        <!-- โครงสร้างตัวถังด้านหลัง -->
+                        <rect x="55" y="20" width="90" height="150" rx="20" fill="#040b15" stroke="#1d3449" stroke-width="2"/>
+
+                        <!-- ของเหลวที่ขยับตามระดับ (ความสูงเต็ม 150px เริ่มต้น y=170) -->
+                        <g clip-path="url(#tank-clip)">
+                            <rect id="water-fill" x="55" y="170" width="90" height="0" fill="url(#tank-water-grad)" filter="url(#tank-glow)"/>
+                        </g>
+
+                        <!-- ขอบแก้วใสและเงาสะท้อน -->
+                        <rect x="55" y="20" width="90" height="150" rx="20" fill="none" stroke="#38bdf8" stroke-width="3" opacity="0.65"/>
+                        <rect x="63" y="28" width="6" height="134" rx="3" fill="#ffffff" opacity="0.15"/>
+
+                        <!-- ขีดสเกลบอกระดับและตัวเลข -->
+                        <g fill="#94a3b8" font-size="11" font-family="ui-monospace, monospace">
+                            <line x1="150" y1="25" x2="160" y2="25" stroke="#94a3b8" stroke-width="1.5"/>
+                            <text x="166" y="29">100%</text>
+
+                            <line x1="150" y1="62" x2="157" y2="62" stroke="#64748b" stroke-width="1.2"/>
+                            <text x="166" y="66">75%</text>
+
+                            <line x1="150" y1="95" x2="160" y2="95" stroke="#94a3b8" stroke-width="1.5"/>
+                            <text x="166" y="99">50%</text>
+
+                            <line x1="150" y1="132" x2="157" y2="132" stroke="#64748b" stroke-width="1.2"/>
+                            <text x="166" y="136">25%</text>
+
+                            <line x1="150" y1="165" x2="160" y2="165" stroke="#94a3b8" stroke-width="1.5"/>
+                            <text x="166" y="169">0%</text>
+                        </g>
+
+                        <!-- ฐานรองถัง -->
+                        <rect x="45" y="175" width="110" height="10" rx="3" fill="#0f2037" stroke="#1d3449" stroke-width="1.5"/>
+                    </svg>
+
+                    <!-- แสดงเปอร์เซ็นต์ใหญ่ -->
+                    <div class="big-percent percent-left" id="tank-percent">0.0%</div>
+                </div>
+
+                <!-- Telemetry ข้อมูลดิบของ Channel A -->
+                <div class="metrics-row">
+                    <div class="metric-box">
+                        <div class="metric-label">ADC Raw (12-bit)</div>
+                        <div class="metric-value" id="val-raw-A">0</div>
+                    </div>
+                    <div class="metric-box">
+                        <div class="metric-label">Voltage (V)</div>
+                        <div class="metric-value" id="val-volt-A">0.00 V</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Card: Channel B (Analog Speedometer) -->
+            <section class="widget-card" aria-label="ช่องสัญญาณ B">
+                <div class="card-header">
+                    <div>
+                        <h2>Analog Speedometer</h2>
+                        <p style="font-size: 0.78rem; color: var(--muted);">Right Gauge (Anti-Collision: 4 &rarr; 1)</p>
+                    </div>
+                    <span class="card-tag tag-chB">CH-B &bull; Simulated</span>
+                </div>
+
+                <div class="widget-body">
+                    <!-- SVG Analog Speedometer (-90deg to +90deg) -->
+                    <svg class="gauge-svg" viewBox="0 0 300 220" role="meter" aria-label="หน้าปัดเข็มไมล์" aria-valuemin="0" aria-valuemax="100" id="speedo-svg">
+                        <defs>
+                            <radialGradient id="speedo-dial-grad" cx="50%" cy="50%" r="50%">
+                                <stop offset="0%" stop-color="#071324"/>
+                                <stop offset="90%" stop-color="#040912"/>
+                                <stop offset="100%" stop-color="#142944"/>
+                            </radialGradient>
+                            <filter id="speedo-needle-glow" x="-50%" y="-50%" width="200%" height="200%">
+                                <feGaussianBlur stdDeviation="3" result="blur"/>
+                                <feMerge>
+                                    <feMergeNode in="blur"/>
+                                    <feMergeNode in="SourceGraphic"/>
+                                </feMerge>
+                            </filter>
+                        </defs>
+
+                        <!-- พื้นหลังหน้าปัดวงกลม -->
+                        <circle cx="150" cy="145" r="115" fill="url(#speedo-dial-grad)" stroke="#1d3449" stroke-width="3"/>
+                        <circle cx="150" cy="145" r="105" fill="none" stroke="rgba(56, 189, 248, 0.2)" stroke-width="1" stroke-dasharray="2,4"/>
+
+                        <!-- ส่วนโค้งเส้นขอบเกจ์ -->
+                        <path d="M 50 145 A 100 100 0 0 1 250 145" fill="none" stroke="#1e3a5f" stroke-width="8" stroke-linecap="round"/>
+                        <path d="M 50 145 A 100 100 0 0 1 190 55" fill="none" stroke="#00f2fe" stroke-width="8" stroke-linecap="round" opacity="0.85"/>
+                        <path d="M 190 55 A 100 100 0 0 1 250 145" fill="none" stroke="#ef4444" stroke-width="8" stroke-linecap="round" opacity="0.85"/>
+
+                        <!-- สเกลขีดและตัวเลขบอกความเร็ว (0, 20, 40, 60, 80, 100) -->
+                        <g fill="#94a3b8" font-size="11" font-family="ui-monospace, monospace" text-anchor="middle">
+                            <!-- 0% (-90deg) -->
+                            <line x1="56" y1="145" x2="68" y2="145" stroke="#f8fafc" stroke-width="2.5"/>
+                            <text x="78" y="149">0</text>
+
+                            <!-- 20% (-54deg) -->
+                            <line x1="68" y1="95" x2="78" y2="102" stroke="#94a3b8" stroke-width="1.8"/>
+                            <text x="88" y="112">20</text>
+
+                            <!-- 40% (-18deg) -->
+                            <line x1="102" y1="58" x2="109" y2="69" stroke="#94a3b8" stroke-width="1.8"/>
+                            <text x="116" y="82">40</text>
+
+                            <!-- 60% (+18deg) -->
+                            <line x1="150" y1="45" x2="150" y2="58" stroke="#f8fafc" stroke-width="2.5"/>
+                            <text x="150" y="74">60</text>
+
+                            <!-- 80% (+54deg) -->
+                            <line x1="198" y1="58" x2="191" y2="69" stroke="#94a3b8" stroke-width="1.8"/>
+                            <text x="184" y="82">80</text>
+
+                            <!-- 100% (+90deg) -->
+                            <line x1="244" y1="145" x2="232" y2="145" stroke="#ef4444" stroke-width="2.5"/>
+                            <text x="222" y="149">100</text>
+                        </g>
+
+                        <!-- ข้อความกลางหน้าปัด -->
+                        <text x="150" y="115" fill="#64748b" font-size="9" letter-spacing="2" text-anchor="middle" font-weight="700">SPEEDOMETER</text>
+
+                        <!-- เข็มชี้ (Needle) หมุนรอบจุด (150, 145) -->
+                        <g id="speedo-needle" aria-hidden="true">
+                            <polygon points="148,145 152,145 150.8,55 149.2,55" fill="#ff3366" filter="url(#speedo-needle-glow)"/>
+                            <circle cx="150" cy="145" r="10" fill="#e2e8f0"/>
+                            <circle cx="150" cy="145" r="5" fill="#ff3366"/>
+                        </g>
+                    </svg>
+
+                    <!-- แสดงเปอร์เซ็นต์ใหญ่ -->
+                    <div class="big-percent percent-right" id="speedo-percent">0.0%</div>
+                </div>
+
+                <!-- Telemetry ข้อมูลดิบของ Channel B -->
+                <div class="metrics-row">
+                    <div class="metric-box">
+                        <div class="metric-label">ADC Raw (12-bit)</div>
+                        <div class="metric-value" id="val-raw-B">0</div>
+                    </div>
+                    <div class="metric-box">
+                        <div class="metric-label">Voltage (V)</div>
+                        <div class="metric-value" id="val-volt-B">0.00 V</div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer Bar -->
+        <footer>
+            <div class="footer-source">
+                <span>Data Source:</span>
+                <span class="source-tag" id="foot-source">กำลังตรวจสอบ…</span>
+            </div>
+            <div>
+                <span>Last Updated: </span>
+                <span id="foot-time">—</span>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Telemetry Update Script -->
+    <script>
+        const statusPill = document.getElementById('status-pill');
+        const statusText = document.getElementById('status-text');
+
+        // Channel A DOM elements (Liquid Tank)
+        const waterFill = document.getElementById('water-fill');
+        const tankPercent = document.getElementById('tank-percent');
+        const valRawA = document.getElementById('val-raw-A');
+        const valVoltA = document.getElementById('val-volt-A');
+
+        // Channel B DOM elements (Speedometer)
+        const speedoNeedle = document.getElementById('speedo-needle');
+        const speedoPercent = document.getElementById('speedo-percent');
+        const valRawB = document.getElementById('val-raw-B');
+        const valVoltB = document.getElementById('val-volt-B');
+
+        // Footer elements
+        const footSource = document.getElementById('foot-source');
+        const footTime = document.getElementById('foot-time');
+
+        // ฟังก์ชันอัปเดตเกจ์ถังของเหลว (Left Gauge: 0 - 100%)
+        function updateTank(pct) {
+            const clamped = Math.max(0, Math.min(100, pct));
+            // ความสูงเต็มถังคือ 150px, ระดับต่ำสุดอยู่ที่ y = 170
+            const fillHeight = (clamped / 100.0) * 150;
+            const fillY = 170 - fillHeight;
+
+            waterFill.setAttribute('y', fillY.toFixed(1));
+            waterFill.setAttribute('height', fillHeight.toFixed(1));
+            tankPercent.textContent = `${clamped.toFixed(1)}%`;
+        }
+
+        // ฟังก์ชันอัปเดตเกจ์เข็มไมล์ (Right Gauge: -90deg ถึง +90deg)
+        function updateSpeedometer(pct) {
+            const clamped = Math.max(0, Math.min(100, pct));
+            // แมป 0-100% เป็น -90 ถึง +90 องศา (ช่วงกวาด 180 องศา)
+            const angle = -90 + (clamped / 100.0) * 180;
+            speedoNeedle.style.transform = `rotate(${angle.toFixed(1)}deg)`;
+            speedoPercent.textContent = `${clamped.toFixed(1)}%`;
+        }
+
+        // โพลข้อมูล Telemetry ทุก 120 ms
+        async function pollTelemetry() {
+            try {
+                const response = await fetch('/api/telemetry');
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+
+                // 1. อัปเดต Channel A (Liquid Tank - ฮาร์ดแวร์จริง)
+                if (data.channelA) {
+                    updateTank(data.channelA.percentage);
+                    valRawA.textContent = data.channelA.rawValue;
+                    valVoltA.textContent = `${data.channelA.voltage.toFixed(2)} V`;
+                }
+
+                // 2. อัปเดต Channel B (Speedometer - สัญญาณจำลอง/เซนเซอร์สอง)
+                if (data.channelB) {
+                    updateSpeedometer(data.channelB.percentage);
+                    valRawB.textContent = data.channelB.rawValue;
+                    valVoltB.textContent = `${data.channelB.voltage.toFixed(2)} V`;
+                }
+
+                // 3. สถานะการเชื่อมต่อและแหล่งข้อมูล
+                const src = data.dataSource || 'Unknown';
+                footSource.textContent = src;
+
+                if (src.includes('Live')) {
+                    statusPill.className = 'status-pill live';
+                    statusText.textContent = 'ESP32 Live';
+                } else {
+                    statusPill.className = 'status-pill simulation';
+                    statusText.textContent = 'Simulation';
+                }
+
+                if (data.lastUpdated) {
+                    const date = new Date(data.lastUpdated);
+                    footTime.textContent = date.toLocaleTimeString('th-TH');
+                }
+
+            } catch (err) {
+                statusPill.className = 'status-pill offline';
+                statusText.textContent = 'Offline';
+                footSource.textContent = 'Disconnected';
+            }
+        }
+
+        // เริ่มต้นการดึงข้อมูล
+        pollTelemetry();
+        setInterval(pollTelemetry, 120);
+    </script>
+</body>
+</html>

@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="ESP32 real-time SVG speedometer dashboard powered by Kestrel">
+    <title>ESP32 IoT Speedometer Dashboard</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #07111f;
+            --panel: rgba(10, 26, 45, 0.86);
+            --panel-strong: #0b1b2f;
+            --line: rgba(141, 198, 255, 0.16);
+            --text: #f2f7ff;
+            --muted: #8ea7c2;
+            --cyan: #32d9ff;
+            --green: #4ade80;
+            --yellow: #facc15;
+            --red: #fb4b67;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background:
+                radial-gradient(circle at 50% 15%, rgba(30, 95, 145, 0.28), transparent 38rem),
+                linear-gradient(145deg, #081522 0%, var(--bg) 60%, #040a12 100%);
+            color: var(--text);
+            font-family: Inter, "Noto Sans Thai", "Segoe UI", sans-serif;
+            padding: clamp(1rem, 3vw, 2.5rem);
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            opacity: 0.16;
+            background-image:
+                linear-gradient(rgba(88, 164, 220, 0.16) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(88, 164, 220, 0.16) 1px, transparent 1px);
+            background-size: 40px 40px;
+            mask-image: linear-gradient(to bottom, black, transparent 80%);
+        }
+
+        .dashboard {
+            position: relative;
+            width: min(1080px, 100%);
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 1rem;
+            padding-bottom: 1.1rem;
+            border-bottom: 1px solid var(--line);
+            margin-bottom: 1.5rem;
+        }
+
+        .eyebrow {
+            margin: 0 0 0.35rem;
+            color: var(--cyan);
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 0.78rem;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: clamp(1.55rem, 4vw, 2.5rem);
+            line-height: 1.1;
+            letter-spacing: -0.03em;
+        }
+
+        .connection {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            min-width: 0;
+            color: var(--muted);
+            font-size: 0.88rem;
+        }
+
+        .connection-dot {
+            width: 0.7rem;
+            height: 0.7rem;
+            flex: 0 0 auto;
+            border-radius: 50%;
+            background: var(--yellow);
+            box-shadow: 0 0 0.9rem currentColor;
+        }
+
+        .connection.live .connection-dot { background: var(--green); color: var(--green); }
+        .connection.simulation .connection-dot { background: var(--yellow); color: var(--yellow); }
+        .connection.offline .connection-dot { background: var(--red); color: var(--red); }
+
+        .workspace {
+            display: grid;
+            grid-template-columns: minmax(0, 1.6fr) minmax(260px, 0.75fr);
+            gap: 1.25rem;
+        }
+
+        .instrument,
+        .side-panel {
+            border: 1px solid var(--line);
+            background: var(--panel);
+            box-shadow: 0 1.8rem 5rem rgba(0, 0, 0, 0.32);
+            backdrop-filter: blur(18px);
+        }
+
+        .instrument {
+            padding: clamp(1rem, 3vw, 2rem);
+            overflow: hidden;
+        }
+
+        .instrument-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        h2, h3 { margin: 0; font-weight: 650; }
+        h2 { font-size: 1rem; letter-spacing: 0.06em; text-transform: uppercase; }
+        h3 { font-size: 0.9rem; color: var(--muted); }
+
+        .alert {
+            border: 1px solid currentColor;
+            padding: 0.35rem 0.6rem;
+            color: var(--green);
+            font: 700 0.72rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+            letter-spacing: 0.06em;
+        }
+
+        .alert.warning { color: var(--yellow); }
+        .alert.danger { color: var(--red); }
+
+        .gauge-svg {
+            display: block;
+            width: min(100%, 600px);
+            margin: 0 auto;
+            overflow: visible;
+            filter: drop-shadow(0 0 24px rgba(50, 217, 255, 0.12));
+        }
+
+        .tick { stroke: #7189a4; stroke-width: 2; }
+        .tick.major { stroke: #dcecff; stroke-width: 3; }
+
+        #needle {
+            transform-origin: 150px 150px;
+            transform: rotate(-90deg);
+            transition: transform 0.15s cubic-bezier(0.22, 0.75, 0.25, 1);
+        }
+
+        .vu-section {
+            margin-top: 0.2rem;
+            border-top: 1px solid var(--line);
+            padding-top: 1.2rem;
+        }
+
+        .vu-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.6rem;
+            color: var(--muted);
+            font: 0.72rem ui-monospace, SFMono-Regular, Menlo, monospace;
+        }
+
+        #vumeter { display: block; width: 100%; height: auto; }
+
+        .led {
+            opacity: 0.14;
+            transition: opacity 0.12s ease, filter 0.12s ease;
+        }
+
+        .side-panel {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .reading {
+            padding: 1.25rem;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .reading:last-child { border-bottom: 0; }
+
+        .reading-label {
+            color: var(--muted);
+            font-size: 0.78rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .reading-value {
+            margin-top: 0.35rem;
+            color: var(--cyan);
+            font: 700 clamp(1.75rem, 5vw, 2.7rem)/1.1 ui-monospace, SFMono-Regular, Menlo, monospace;
+        }
+
+        .reading-unit { font-size: 0.9rem; color: var(--muted); }
+
+        .source-value {
+            margin-top: 0.55rem;
+            color: var(--text);
+            font-size: 0.92rem;
+            line-height: 1.5;
+            overflow-wrap: anywhere;
+        }
+
+        .timestamp {
+            margin-top: auto;
+            padding: 1.25rem;
+            color: var(--muted);
+            font: 0.76rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+        }
+
+        .creative-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.25rem;
+            margin-top: 1.25rem;
+        }
+
+        .widget-card {
+            min-width: 0;
+            padding: clamp(1rem, 3vw, 1.6rem);
+            border: 1px solid var(--line);
+            background: var(--panel);
+            box-shadow: 0 1.8rem 5rem rgba(0, 0, 0, 0.24);
+            backdrop-filter: blur(18px);
+        }
+
+        .widget-heading {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .widget-heading span {
+            color: var(--muted);
+            font: 0.78rem ui-monospace, SFMono-Regular, Menlo, monospace;
+        }
+
+        .seven-board,
+        .tank-board {
+            display: block;
+            width: min(100%, 310px);
+            height: 230px;
+            margin: 1rem auto 0;
+        }
+
+        .seg {
+            fill: #23384a;
+            opacity: 0.16;
+            transition: opacity 0.08s ease, fill 0.08s ease, filter 0.08s ease;
+        }
+
+        .seg.active {
+            fill: #00ffcc;
+            opacity: 1;
+            filter: drop-shadow(0 0 6px #00ffcc);
+        }
+
+        #water-fill {
+            transition: y 0.15s ease-out, height 0.15s ease-out;
+        }
+
+        @media (max-width: 760px) {
+            header { align-items: flex-start; flex-direction: column; }
+            .workspace { grid-template-columns: 1fr; }
+            .side-panel { display: grid; grid-template-columns: 1fr 1fr; }
+            .timestamp { grid-column: 1 / -1; }
+            .creative-grid { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 440px) {
+            .side-panel { grid-template-columns: 1fr; }
+            .timestamp { grid-column: auto; }
+            .instrument-title { align-items: flex-start; flex-direction: column; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            #needle, .led, .seg, #water-fill { transition: none; }
+        }
+    </style>
+</head>
+<body>
+    <main class="dashboard">
+        <header>
+            <div>
+                <p class="eyebrow">ESP32 · Kestrel · Live Telemetry</p>
+                <h1>IoT Edge Speedometer</h1>
+            </div>
+            <div class="connection" id="connection" role="status" aria-live="polite">
+                <span class="connection-dot" aria-hidden="true"></span>
+                <span id="connection-text">กำลังเชื่อมต่อเซิร์ฟเวอร์</span>
+            </div>
+        </header>
+
+        <div class="workspace">
+            <section class="instrument" aria-labelledby="gauge-title">
+                <div class="instrument-title">
+                    <h2 id="gauge-title">Sensor output</h2>
+                    <span class="alert" id="alert-level">NORMAL</span>
+                </div>
+
+                <svg class="gauge-svg" viewBox="0 0 300 205" role="meter" aria-label="เปอร์เซ็นต์สัญญาณเซนเซอร์" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                    <defs>
+                        <linearGradient id="track-gradient" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%" stop-color="#4ade80"/>
+                            <stop offset="65%" stop-color="#facc15"/>
+                            <stop offset="100%" stop-color="#fb4b67"/>
+                        </linearGradient>
+                        <filter id="needle-glow" x="-100%" y="-100%" width="300%" height="300%">
+                            <feGaussianBlur stdDeviation="2.2" result="blur"/>
+                            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                        </filter>
+                    </defs>
+
+                    <path d="M 40 150 A 110 110 0 0 1 260 150" fill="none" stroke="#172b43" stroke-width="22" stroke-linecap="round"/>
+                    <path d="M 40 150 A 110 110 0 0 1 260 150" fill="none" stroke="url(#track-gradient)" stroke-width="8" stroke-linecap="round"/>
+
+                    <g aria-hidden="true">
+                        <line class="tick major" x1="40" y1="150" x2="53" y2="150"/>
+                        <line class="tick" x1="45.4" y1="116" x2="57.8" y2="120"/>
+                        <line class="tick" x1="61" y1="85" x2="71.5" y2="92.5"/>
+                        <line class="tick" x1="85" y1="61" x2="92.5" y2="71.5"/>
+                        <line class="tick" x1="116" y1="45.4" x2="120" y2="57.8"/>
+                        <line class="tick major" x1="150" y1="40" x2="150" y2="53"/>
+                        <line class="tick" x1="184" y1="45.4" x2="180" y2="57.8"/>
+                        <line class="tick" x1="215" y1="61" x2="207.5" y2="71.5"/>
+                        <line class="tick" x1="239" y1="85" x2="228.5" y2="92.5"/>
+                        <line class="tick" x1="254.6" y1="116" x2="242.2" y2="120"/>
+                        <line class="tick major" x1="260" y1="150" x2="247" y2="150"/>
+                    </g>
+
+                    <text x="36" y="176" fill="#8ea7c2" font-size="11" text-anchor="middle">0</text>
+                    <text x="150" y="27" fill="#8ea7c2" font-size="11" text-anchor="middle">50</text>
+                    <text x="264" y="176" fill="#8ea7c2" font-size="11" text-anchor="middle">100</text>
+                    <text id="disp-percent" x="150" y="126" fill="#f2f7ff" font-size="31" font-weight="700" text-anchor="middle">0.0%</text>
+                    <text x="150" y="143" fill="#7189a4" font-size="8" letter-spacing="2" text-anchor="middle">PERCENT</text>
+
+                    <g id="needle" aria-hidden="true">
+                        <polygon points="147,150 153,150 151.4,54 148.6,54" fill="#ff365f" filter="url(#needle-glow)"/>
+                        <circle cx="150" cy="150" r="12" fill="#dcecff"/>
+                        <circle cx="150" cy="150" r="6" fill="#ff365f"/>
+                    </g>
+                </svg>
+
+                <div class="vu-section">
+                    <div class="vu-labels"><span>VU METER</span><span>0 — 100%</span></div>
+                    <svg viewBox="0 0 250 40" id="vumeter" role="meter" aria-label="แถบระดับสัญญาณ" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                        <rect class="led" x="5" y="5" width="18" height="30" rx="2" fill="#22c55e"/>
+                        <rect class="led" x="28" y="5" width="18" height="30" rx="2" fill="#22c55e"/>
+                        <rect class="led" x="51" y="5" width="18" height="30" rx="2" fill="#22c55e"/>
+                        <rect class="led" x="74" y="5" width="18" height="30" rx="2" fill="#22c55e"/>
+                        <rect class="led" x="97" y="5" width="18" height="30" rx="2" fill="#22c55e"/>
+                        <rect class="led" x="120" y="5" width="18" height="30" rx="2" fill="#22c55e"/>
+                        <rect class="led" x="143" y="5" width="18" height="30" rx="2" fill="#eab308"/>
+                        <rect class="led" x="166" y="5" width="18" height="30" rx="2" fill="#eab308"/>
+                        <rect class="led" x="189" y="5" width="18" height="30" rx="2" fill="#ef4444"/>
+                        <rect class="led" x="212" y="5" width="18" height="30" rx="2" fill="#ef4444"/>
+                    </svg>
+                </div>
+            </section>
+
+            <aside class="side-panel" aria-label="ค่าข้อมูลเซนเซอร์">
+                <div class="reading">
+                    <div class="reading-label">ADC 12-bit raw</div>
+                    <div class="reading-value" id="disp-raw">0</div>
+                    <span class="reading-unit">ช่วง 0–4095</span>
+                </div>
+                <div class="reading">
+                    <div class="reading-label">Sensor voltage</div>
+                    <div class="reading-value" id="disp-volt">0.00</div>
+                    <span class="reading-unit">โวลต์</span>
+                </div>
+                <div class="reading">
+                    <div class="reading-label">Data source</div>
+                    <div class="source-value" id="disp-source">กำลังรอข้อมูล…</div>
+                </div>
+                <div class="timestamp" id="disp-time">อัปเดตล่าสุด: —</div>
+            </aside>
+        </div>
+
+        <div class="creative-grid">
+            <section class="widget-card" aria-labelledby="seven-title">
+                <div class="widget-heading">
+                    <h2 id="seven-title">7-Segment Display</h2>
+                    <span>00–99%</span>
+                </div>
+
+                <svg class="seven-board" viewBox="0 0 230 150" role="meter" aria-label="เปอร์เซ็นต์แบบตัวเลข 7-Segment" aria-valuemin="0" aria-valuemax="99" aria-valuenow="0">
+                    <rect x="5" y="5" width="220" height="140" rx="10" fill="#050b13" stroke="#1d3449" stroke-width="2"/>
+
+                    <g id="seg-digit1" transform="translate(28, 20)">
+                        <polygon class="seg a" points="14,12 19,7 41,7 46,12 41,17 19,17"/>
+                        <polygon class="seg b" points="48,14 53,19 53,41 48,46 43,41 43,19"/>
+                        <polygon class="seg c" points="48,54 53,59 53,81 48,86 43,81 43,59"/>
+                        <polygon class="seg d" points="14,88 19,83 41,83 46,88 41,93 19,93"/>
+                        <polygon class="seg e" points="12,54 17,59 17,81 12,86 7,81 7,59"/>
+                        <polygon class="seg f" points="12,14 17,19 17,41 12,46 7,41 7,19"/>
+                        <polygon class="seg g" points="14,50 19,45 41,45 46,50 41,55 19,55"/>
+                    </g>
+
+                    <g id="seg-digit2" transform="translate(102, 20)">
+                        <polygon class="seg a" points="14,12 19,7 41,7 46,12 41,17 19,17"/>
+                        <polygon class="seg b" points="48,14 53,19 53,41 48,46 43,41 43,19"/>
+                        <polygon class="seg c" points="48,54 53,59 53,81 48,86 43,81 43,59"/>
+                        <polygon class="seg d" points="14,88 19,83 41,83 46,88 41,93 19,93"/>
+                        <polygon class="seg e" points="12,54 17,59 17,81 12,86 7,81 7,59"/>
+                        <polygon class="seg f" points="12,14 17,19 17,41 12,46 7,41 7,19"/>
+                        <polygon class="seg g" points="14,50 19,45 41,45 46,50 41,55 19,55"/>
+                    </g>
+
+                    <text x="184" y="94" fill="#00ffcc" font-family="ui-monospace, monospace" font-size="27" font-weight="700">%</text>
+                    <text x="115" y="132" fill="#7189a4" font-size="12" text-anchor="middle">DIGITAL SENSOR LEVEL</text>
+                </svg>
+            </section>
+
+            <section class="widget-card" aria-labelledby="tank-title">
+                <div class="widget-heading">
+                    <h2 id="tank-title">Tank Level</h2>
+                    <span>0–100%</span>
+                </div>
+
+                <svg class="tank-board" viewBox="0 0 220 220" role="meter" aria-label="ระดับของเหลวจำลอง" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                    <defs>
+                        <linearGradient id="water-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stop-color="#00f2fe" stop-opacity="0.96"/>
+                            <stop offset="100%" stop-color="#2898ff" stop-opacity="0.84"/>
+                        </linearGradient>
+                        <clipPath id="tank-shape">
+                            <rect x="55" y="20" width="90" height="145" rx="20"/>
+                        </clipPath>
+                        <filter id="water-glow" x="-40%" y="-40%" width="180%" height="180%">
+                            <feGaussianBlur stdDeviation="3" result="blur"/>
+                            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                        </filter>
+                    </defs>
+
+                    <rect x="55" y="20" width="90" height="145" rx="20" fill="#050b13" stroke="#1d3449" stroke-width="2"/>
+                    <g clip-path="url(#tank-shape)">
+                        <rect id="water-fill" x="55" y="165" width="90" height="0" fill="url(#water-gradient)" filter="url(#water-glow)"/>
+                    </g>
+                    <rect x="55" y="20" width="90" height="145" rx="20" fill="none" stroke="#32d9ff" stroke-width="3" opacity="0.65"/>
+                    <rect x="64" y="29" width="7" height="126" rx="3.5" fill="#fff" opacity="0.13"/>
+
+                    <g fill="#8ea7c2" font-size="12">
+                        <line x1="150" y1="20" x2="160" y2="20" stroke="#8ea7c2" stroke-width="2"/><text x="166" y="24">100%</text>
+                        <line x1="150" y1="56" x2="157" y2="56" stroke="#7189a4"/><text x="166" y="60">75%</text>
+                        <line x1="150" y1="92" x2="160" y2="92" stroke="#8ea7c2" stroke-width="2"/><text x="166" y="96">50%</text>
+                        <line x1="150" y1="129" x2="157" y2="129" stroke="#7189a4"/><text x="166" y="133">25%</text>
+                        <line x1="150" y1="165" x2="160" y2="165" stroke="#8ea7c2" stroke-width="2"/><text x="166" y="169">0%</text>
+                    </g>
+
+                    <text id="tank-value" x="100" y="195" text-anchor="middle" fill="#32d9ff" font-size="22" font-weight="700">0.0%</text>
+                    <text x="100" y="213" text-anchor="middle" fill="#7189a4" font-size="12">TANK LEVEL</text>
+                </svg>
+            </section>
+        </div>
+    </main>
+
+    <script>
+        const gauge = document.querySelector('.gauge-svg');
+        const vuMeter = document.getElementById('vumeter');
+        const sevenBoard = document.querySelector('.seven-board');
+        const tankBoard = document.querySelector('.tank-board');
+        const connection = document.getElementById('connection');
+
+        const SEGMENT_MAP = {
+            0: [1, 1, 1, 1, 1, 1, 0],
+            1: [0, 1, 1, 0, 0, 0, 0],
+            2: [1, 1, 0, 1, 1, 0, 1],
+            3: [1, 1, 1, 1, 0, 0, 1],
+            4: [0, 1, 1, 0, 0, 1, 1],
+            5: [1, 0, 1, 1, 0, 1, 1],
+            6: [1, 0, 1, 1, 1, 1, 1],
+            7: [1, 1, 1, 0, 0, 0, 0],
+            8: [1, 1, 1, 1, 1, 1, 1],
+            9: [1, 1, 1, 1, 0, 1, 1]
+        };
+        const SEGMENT_NAMES = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+
+        function clamp(value, min, max) {
+            return Math.min(max, Math.max(min, value));
+        }
+
+        function percentToAngle(percentage) {
+            return (clamp(percentage, 0, 100) / 100) * 180 - 90;
+        }
+
+        function updateVuMeter(percentage) {
+            const leds = document.querySelectorAll('#vumeter .led');
+            const activeCount = Math.round((clamp(percentage, 0, 100) / 100) * leds.length);
+
+            leds.forEach((led, index) => {
+                const isActive = index < activeCount;
+                const color = led.getAttribute('fill');
+                led.style.opacity = isActive ? '1' : '0.14';
+                led.style.filter = isActive ? `drop-shadow(0 0 5px ${color})` : 'none';
+            });
+
+            vuMeter.setAttribute('aria-valuenow', clamp(percentage, 0, 100).toFixed(1));
+        }
+
+        function setDigit(groupId, digit) {
+            const group = document.getElementById(groupId);
+            const pattern = SEGMENT_MAP[digit] || SEGMENT_MAP[0];
+
+            SEGMENT_NAMES.forEach((name, index) => {
+                group.querySelector(`.${name}`).classList.toggle('active', pattern[index] === 1);
+            });
+        }
+
+        function update7Segment(percentage) {
+            const value = Math.min(99, Math.max(0, Math.round(percentage)));
+            setDigit('seg-digit1', Math.floor(value / 10));
+            setDigit('seg-digit2', value % 10);
+            sevenBoard.setAttribute('aria-valuenow', value);
+        }
+
+        function updateTankLevel(percentage) {
+            const value = clamp(percentage, 0, 100);
+            const maxHeight = 145;
+            const tankBottom = 165;
+            const fillHeight = (value / 100) * maxHeight;
+            const water = document.getElementById('water-fill');
+
+            water.setAttribute('height', fillHeight.toFixed(2));
+            water.setAttribute('y', (tankBottom - fillHeight).toFixed(2));
+            document.getElementById('tank-value').textContent = `${value.toFixed(1)}%`;
+            tankBoard.setAttribute('aria-valuenow', value.toFixed(1));
+        }
+
+        function updateAlert(level) {
+            const alert = document.getElementById('alert-level');
+            alert.textContent = level;
+            alert.className = 'alert';
+            if (level === 'WARNING') alert.classList.add('warning');
+            if (level === 'DANGER (HIGH)') alert.classList.add('danger');
+        }
+
+        function updateConnection(source) {
+            const isLive = source.startsWith('Live Hardware');
+            connection.className = `connection ${isLive ? 'live' : 'simulation'}`;
+            document.getElementById('connection-text').textContent = isLive
+                ? 'เชื่อมต่อ ESP32 แล้ว'
+                : 'กำลังใช้ข้อมูลจำลอง';
+        }
+
+        async function pollTelemetry() {
+            try {
+                const response = await fetch('/api/telemetry', { cache: 'no-store' });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+                const data = await response.json();
+                const percentage = clamp(Number(data.percentage) || 0, 0, 100);
+
+                document.getElementById('disp-percent').textContent = `${percentage.toFixed(1)}%`;
+                document.getElementById('disp-raw').textContent = data.rawValue;
+                document.getElementById('disp-volt').textContent = Number(data.voltage).toFixed(2);
+                document.getElementById('disp-source').textContent = data.dataSource;
+                document.getElementById('disp-time').textContent = `อัปเดตล่าสุด: ${data.timestamp}`;
+                document.getElementById('needle').style.transform = `rotate(${percentToAngle(percentage)}deg)`;
+
+                gauge.setAttribute('aria-valuenow', percentage.toFixed(1));
+                updateVuMeter(percentage);
+                update7Segment(percentage);
+                updateTankLevel(percentage);
+                updateAlert(data.alertLevel || 'NORMAL');
+                updateConnection(data.dataSource || '');
+            } catch (error) {
+                connection.className = 'connection offline';
+                document.getElementById('connection-text').textContent = 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้';
+                document.getElementById('disp-source').textContent = 'รอการเชื่อมต่อกับ Kestrel';
+                console.error('Polling error:', error);
+            }
+        }
+
+        pollTelemetry();
+        setInterval(pollTelemetry, 150);
+    </script>
+</body>
+</html>
